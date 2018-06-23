@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 
 	"github.com/pkg/browser"
@@ -26,11 +27,31 @@ func main() {
 	url := conf.AuthCodeURL("state", oauth2.AccessTypeOffline)
 	browser.OpenURL(url)
 	authcode := GetAuthorizationCode(ctx, cancel)
-	print(authcode)
-	//err := drive.New(httpClient)
+	tok, err := conf.Exchange(context.Background(), authcode)
+	if err != nil {
+		print(err.Error())
+	}
+	srv, err := drive.New(conf.Client(context.Background(), tok))
+	if err != nil {
+		log.Fatalf("Unable to retrieve Drive client: %v", err)
+	}
+
+	r, err := srv.Files.List().PageSize(20).
+		Fields("nextPageToken, files(id, name)").Do()
+	if err != nil {
+		log.Fatalf("Unable to retrieve files: %v", err)
+	}
+	fmt.Println("Files:")
+	if len(r.Files) == 0 {
+		fmt.Println("No files found.")
+	} else {
+		for _, i := range r.Files {
+			fmt.Printf("%s (%s)\n", i.Name, i.Id)
+		}
+	}
+
 }
 
-//Starts a server listens to the code and returns it
 func GetAuthorizationCode(ctx context.Context, cancel context.CancelFunc) string {
 	var x string
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -40,12 +61,11 @@ func GetAuthorizationCode(ctx context.Context, cancel context.CancelFunc) string
 	})
 	srv := &http.Server{Addr: ":9004"}
 	go func() {
-		if err := srv.ListenAndServe(); err != nil {
-			print("Not able to listen to 9004")
-		}
+		srv.ListenAndServe()
 	}()
 	<-ctx.Done()
 	if err := srv.Shutdown(ctx); err != nil && err != context.Canceled {
+		fmt.Print("Error at shutdown")
 		fmt.Print(err)
 	}
 	return x
