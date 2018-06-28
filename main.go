@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -13,6 +14,14 @@ import (
 	"golang.org/x/oauth2"
 	drive "google.golang.org/api/drive/v3"
 )
+
+type ClientSecret struct {
+	ClientID     string `json:"client_id"`
+	ProjectID    string `json:"project_id"`
+	AuthURI      string `json:"auth_uri"`
+	TokenURI     string `json:"token_uri"`
+	ClientSecret string `json:"client_secret"`
+}
 
 func getClient(config *oauth2.Config) *http.Client {
 
@@ -71,35 +80,53 @@ func GetAuthorizationCode(ctx context.Context, cancel context.CancelFunc) string
 	return x
 }
 
-func main() {
+func getOrCreateFolder(d *drive.Service, folderName string) string {
+	//folderId := ""
+	if folderName == "" {
+		return ""
+	}
+	q := fmt.Sprintf("name=\"%s\" and mimeType=\"application/vnd.google-apps.folder\"", folderName)
+	print(q)
+	r, err := d.Files.List().Do()
+	if err != nil {
+		fmt.Printf("Unable to retrieve Dlfer name")
+	}
+	for _, file := range r.Files {
+		fmt.Println(file.Name)
+	}
+	return "done"
+}
 
-	config := &oauth2.Config{
-		ClientID:     "1055300065102-6jbjc6hc8inlnpme9bt1emnesta5b337.apps.googleusercontent.com",
-		ClientSecret: "Fk12e1-dycx0JXFK_wtax9HZ",
+func readSecretsFromFile(path string) *oauth2.Config {
+	var data map[string]ClientSecret
+	b, err := ioutil.ReadFile(path)
+	if err != nil {
+		fmt.Println("File Not found.")
+		return nil
+	}
+	json.Unmarshal(b, &data)
+	fmt.Println(data)
+	fmt.Println(data["installed"])
+	client := data["installed"]
+	return &oauth2.Config{
+		ClientID:     client.ClientID,
+		ClientSecret: client.ClientSecret,
 		Scopes:       []string{drive.DriveScope},
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  "https://accounts.google.com/o/oauth2/auth",
-			TokenURL: "https://accounts.google.com/o/oauth2/token",
+			AuthURL:  client.AuthURI,
+			TokenURL: client.TokenURI,
 		},
 		RedirectURL: "http://127.0.0.1:9004",
 	}
+
+}
+
+func main() {
+	config := readSecretsFromFile("client_secret.json")
 	client := getClient(config)
 	srv, err := drive.New(client)
 	if err != nil {
 		log.Fatalf("Unable to retrieve Drive client: %v", err)
 	}
-	r, err := srv.Files.List().PageSize(20).
-		Fields("nextPageToken, files(id, name)").Do()
-	if err != nil {
-		log.Fatalf("Unable to retrieve files: %v", err)
-	}
-	fmt.Println("Files:")
-	if len(r.Files) == 0 {
-		fmt.Println("No files found.")
-	} else {
-		for _, i := range r.Files {
-			fmt.Printf("%s (%s)\n", i.Name, i.Id)
-		}
-	}
-
+	getOrCreateFolder(srv, "unit2_assignment_02.py")
 }
