@@ -105,8 +105,6 @@ func readSecretsFromFile(path string) *oauth2.Config {
 		return nil
 	}
 	json.Unmarshal(b, &data)
-	fmt.Println(data)
-	fmt.Println(data["installed"])
 	client := data["installed"]
 	return &oauth2.Config{
 		ClientID:     client.ClientID,
